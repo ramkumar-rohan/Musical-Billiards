@@ -2,11 +2,16 @@
 
 public class GlobalData // wtf is this bro
 {
-    static int id;
-    0 => static int idflag;
+    static int leftid;
+    0 => static int leftidflag;
+    static int rightid;
+    0 => static int rightidflag;
 }
 public class LeftClickCommand extends MouseCommand {
-    fun void click(MouseTarget target) { (target $ ExtendedMouseTarget).id => GlobalData.id; 1 => GlobalData.idflag;}
+    fun void click(MouseTarget target) { (target $ ExtendedMouseTarget).id => GlobalData.leftid; 1 => GlobalData.leftidflag;}
+}
+public class RightClickCommand extends MouseCommand {
+    fun void click(MouseTarget target) { (target $ ExtendedMouseTarget).id => GlobalData.rightid; 1 => GlobalData.rightidflag;}
 }
 
 public class ExtendedMouseTarget extends MouseTarget {
@@ -45,7 +50,9 @@ fun vec3 index_pos(int i)
 vec3 positions[12];
 GText text[12];
 GSphere points[12];
-LeftClickCommand clickCommand;
+int enable[12];
+RightClickCommand rightClickCommand;
+LeftClickCommand leftClickCommand;
 ExtendedMouseTarget targets[12];
 
 ["C", "G", "D", "A", "E", "B", "F#", "C#", "Ab", "Eb", "Bb", "F"] @=> string textword[];
@@ -54,6 +61,7 @@ ExtendedMouseTarget targets[12];
 
 for (0 => int i; i < 12; i++)
 {
+    1 => enable[i];
     index_pos(i)=> vec3 pos;
     
     pos => points[i].pos;
@@ -66,8 +74,10 @@ for (0 => int i; i < 12; i++)
 
 
     ExtendedMouseTarget t(points[i], @(0.5 / points[i].sca().x, 0.5 / points[i].sca().x), i);
-    LeftClickCommand click() @=> clickCommand;
-    Mouse.bind(clickCommand, Mouse.LEFT, t);
+    LeftClickCommand leftclick() @=> leftClickCommand;
+    Mouse.bind(leftClickCommand, Mouse.LEFT, t);
+    RightClickCommand rightclick() @=> rightClickCommand;
+    Mouse.bind(rightClickCommand, Mouse.RIGHT, t);
 
 
     text[i].text(textword[i]);
@@ -168,7 +178,10 @@ fun void bounce_forever(int start_index, int target_index)
     }
     while (true)
     {
-        spork ~ playSound(start_index);
+        if (enable[start_index])
+        {
+            spork ~ playSound(start_index);
+        }
         bounce(point, start_index, target_index) @=> int shit[];
         shit[0] => start_index;
         shit[1] => target_index;
@@ -178,7 +191,7 @@ fun void bounce_forever(int start_index, int target_index)
 fun void playSound(int i)
 {
     Tween.play(scaleAnimation(points[i]));
-    SinOsc sin => Envelope env => dac;
+    TriOsc sin => Envelope env => dac;
     10::ms => env.duration;
     Std.mtof(sounds[i]) => sin.freq;
     0.2 => sin.gain;
@@ -189,24 +202,24 @@ fun void playSound(int i)
 
 }
 
-fun int[] pollInputs()
+fun int[] pollLeftClickInputs()
 {
 
     int ret[2];
     int start, target;
     do
     {
-        while (GlobalData.idflag == 0){10::ms => now;}
-        0 => GlobalData.idflag;
-        GlobalData.id => start;
+        while (GlobalData.leftidflag == 0){10::ms => now;}
+        0 => GlobalData.leftidflag;
+        GlobalData.leftid => start;
 
         index_pos(start) => temp_point.pos;
         temp_point --> GG.scene();
 
     
-        while (GlobalData.idflag == 0){10::ms => now;}
-        0 => GlobalData.idflag;
-        GlobalData.id => target;
+        while (GlobalData.leftidflag == 0){10::ms => now;}
+        0 => GlobalData.leftidflag;
+        GlobalData.leftid => target;
         temp_point --< GG.scene();
     } while (target==start);
     temp_point --> GG.scene();
@@ -216,11 +229,38 @@ fun int[] pollInputs()
     return ret;
 }
 
+fun int pollRightClickInputs()
+{
+    while (GlobalData.rightidflag == 0){10::ms => now;}
+    0 => GlobalData.rightidflag;
+    return GlobalData.rightid;
+}
+
+fun void disableNodes()
+{
+    while (true)
+    {
+        pollRightClickInputs() => int node;
+
+        if (enable[node])
+        {
+            0 => enable[node];
+            (points[node].mat() $ FlatMaterial).color(Color.RED);
+        }
+        else
+        {
+            1 => enable[node];
+            (points[node].mat() $ FlatMaterial).color(Color.YELLOW);
+        }
+    }
+}
+
 fun void startSequence()
 {
+    spork ~ disableNodes();
     while(true)
     {
-        pollInputs() @=> int data[];
+        pollLeftClickInputs() @=> int data[];
         spork ~ bounce_forever(data[0], data[1]);
     }
 }
