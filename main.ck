@@ -29,6 +29,7 @@ public class ExtendedMouseTarget extends MouseTarget {
 5::ms => dur update;
 200::ms => dur tick;
 
+GWindow.fullscreen();
 
 GTorus ring;
 ring.geometry() $ TorusGeometry @=> TorusGeometry ring_geo;
@@ -74,9 +75,9 @@ for (0 => int i; i < 12; i++)
 
 
     ExtendedMouseTarget t(points[i], @(0.5 / points[i].sca().x, 0.5 / points[i].sca().x), i);
-    LeftClickCommand leftclick() @=> leftClickCommand;
+    LeftClickCommand leftClickCommand();
     Mouse.bind(leftClickCommand, Mouse.LEFT, t);
-    RightClickCommand rightclick() @=> rightClickCommand;
+    RightClickCommand rightClickCommand();
     Mouse.bind(rightClickCommand, Mouse.RIGHT, t);
 
 
@@ -264,10 +265,6 @@ fun void startSequence()
         spork ~ bounce_forever(data[0], data[1]);
     }
 }
-
-
-
-
 
 GMesh temp_point(point_geo, mat);
 
