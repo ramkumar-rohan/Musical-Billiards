@@ -6,6 +6,9 @@ public class GlobalData // wtf is this bro
     0 => static int leftidflag;
     static int rightid;
     0 => static int rightidflag;
+
+    static int key;
+    0 => static int keyflag;
 }
 public class LeftClickCommand extends MouseCommand {
     fun void click(MouseTarget target) { (target $ ExtendedMouseTarget).id => GlobalData.leftid; 1 => GlobalData.leftidflag;}
@@ -22,14 +25,20 @@ public class ExtendedMouseTarget extends MouseTarget {
         size @=> this.size;
         id => this.id;
     }
+}
 
+public class ColorCommand extends KeyboardCommand
+{
+    int key;
+    fun @construct(int i) {i => key;}
+    fun void run() {key => GlobalData.key; 1 => GlobalData.keyflag;}
 }
 
 
-5::ms => dur update;
+10::ms => dur update;
 200::ms => dur tick;
 
-GWindow.fullscreen();
+// GWindow.fullscreen();
 
 GTorus ring;
 ring.geometry() $ TorusGeometry @=> TorusGeometry ring_geo;
@@ -52,9 +61,15 @@ vec3 positions[12];
 GText text[12];
 GSphere points[12];
 int enable[12];
-RightClickCommand rightClickCommand;
-LeftClickCommand leftClickCommand;
-ExtendedMouseTarget targets[12];
+
+ColorCommand colorCommand1(1);
+ColorCommand colorCommand2(2);
+ColorCommand colorCommand3(3);
+ColorCommand colorCommand4(4);
+Keyboard.bind(colorCommand1, GWindow.KEY_1);
+Keyboard.bind(colorCommand2, GWindow.KEY_2);
+Keyboard.bind(colorCommand3, GWindow.KEY_3);
+Keyboard.bind(colorCommand4, GWindow.KEY_4);
 
 ["C", "G", "D", "A", "E", "B", "F#", "C#", "Ab", "Eb", "Bb", "F"] @=> string textword[];
 
@@ -74,7 +89,7 @@ for (0 => int i; i < 12; i++)
 
 
 
-    ExtendedMouseTarget t(points[i], @(0.5 / points[i].sca().x, 0.5 / points[i].sca().x), i);
+    ExtendedMouseTarget t(points[i], @(0.25 / points[i].sca().x, 0.25 / points[i].sca().x), i);
     LeftClickCommand leftClickCommand();
     Mouse.bind(leftClickCommand, Mouse.LEFT, t);
     RightClickCommand rightClickCommand();
@@ -162,9 +177,17 @@ fun int[] bounce(GGen point, int start_index, int target_index)
     return [target_index, (2 * target_index - start_index) % 12];
 }
 
-fun void bounce_forever(int start_index, int target_index)
+fun void bounce_forever(int start_index, int target_index, int osc_num)
 {
     GMesh point(point_geo, mat);
+    Osc @ oscs[4];
+    SinOsc sin @=> oscs[0];
+    TriOsc tri @=> oscs[1];
+    SqrOsc sqr @=> oscs[2];
+    SawOsc saw @=> oscs[3];
+    oscs[osc_num] @=> Osc osc;
+    0.1 => osc.gain;
+ 
     
     tick - (now % tick) => now;
     
@@ -181,7 +204,7 @@ fun void bounce_forever(int start_index, int target_index)
     {
         if (enable[start_index])
         {
-            spork ~ playSound(start_index);
+            spork ~ playSound(start_index, osc);
         }
         bounce(point, start_index, target_index) @=> int shit[];
         shit[0] => start_index;
@@ -189,25 +212,32 @@ fun void bounce_forever(int start_index, int target_index)
     }
 }
 
-fun void playSound(int i)
+fun void playSound(int i, Osc osc)
 {
     Tween.play(scaleAnimation(points[i]));
-    TriOsc sin => Envelope env => dac;
+    
+     
+    osc => Envelope env =>  OnePole pole => dac;
+    //SinOsc osc1 => Envelope env => dac;
     10::ms => env.duration;
-    Std.mtof(sounds[i]) => sin.freq;
-    0.2 => sin.gain;
+    Std.mtof(sounds[i]) => osc.freq;
     env.keyOn();
     100::ms => now;
     env.keyOff();
     10::ms => now;
+
+    osc =< env;
 
 }
 
 fun int[] pollLeftClickInputs()
 {
 
-    int ret[2];
-    int start, target;
+    int ret[3];
+    int start, target, osc;
+    int key; 
+
+    1 => key;
     do
     {
         while (GlobalData.leftidflag == 0){10::ms => now;}
@@ -217,15 +247,24 @@ fun int[] pollLeftClickInputs()
         index_pos(start) => temp_point.pos;
         temp_point --> GG.scene();
 
-    
-        while (GlobalData.leftidflag == 0){10::ms => now;}
+        while (GlobalData.leftidflag == 0)
+        {
+            if (GlobalData.keyflag != 0)
+            {
+                GlobalData.key => key;
+                0 => GlobalData.keyflag;
+            }
+            10::ms => now;
+        }
         0 => GlobalData.leftidflag;
+        key - 1=> osc;
         GlobalData.leftid => target;
         temp_point --< GG.scene();
     } while (target==start);
     temp_point --> GG.scene();
     start => ret[0];
     target => ret[1];
+    osc => ret[2];
 
     return ret;
 }
@@ -262,7 +301,7 @@ fun void startSequence()
     while(true)
     {
         pollLeftClickInputs() @=> int data[];
-        spork ~ bounce_forever(data[0], data[1]);
+        spork ~ bounce_forever(data[0], data[1], data[2]);
     }
 }
 
@@ -276,4 +315,5 @@ while (true)
     GG.nextFrame() => now;
     Mouse.update();
     Tween.update();
+    Keyboard.update();
 }
