@@ -60,6 +60,8 @@ fun vec3 index_pos(int i)
 vec3 positions[12];
 GText text[12];
 GSphere points[12];
+GGen hitboxes[12];
+
 int enable[12];
 
 ColorCommand colorCommand1(1);
@@ -88,8 +90,10 @@ for (0 => int i; i < 12; i++)
     points[i] --> GG.scene();
 
 
+    pos => hitboxes[i].pos;
+    hitboxes[i] --> GG.scene();
 
-    ExtendedMouseTarget t(points[i], @(0.25 / points[i].sca().x, 0.25 / points[i].sca().x), i);
+    ExtendedMouseTarget t(hitboxes[i], @(0.25, 0.25), i);
     LeftClickCommand leftClickCommand();
     Mouse.bind(leftClickCommand, Mouse.LEFT, t);
     RightClickCommand rightClickCommand();
@@ -191,7 +195,6 @@ fun void bounce_forever(int start_index, int target_index, int osc_num)
     
     tick - (now % tick) => now;
     
-    temp_point --< GG.scene();
     
     point --> GG.scene();
  
@@ -261,7 +264,6 @@ fun int[] pollLeftClickInputs()
         GlobalData.leftid => target;
         temp_point --< GG.scene();
     } while (target==start);
-    temp_point --> GG.scene();
     start => ret[0];
     target => ret[1];
     osc => ret[2];
