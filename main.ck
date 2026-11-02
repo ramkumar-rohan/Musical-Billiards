@@ -62,6 +62,7 @@ GText text[12];
 GSphere points[12];
 GGen hitboxes[12];
 
+int lock[12];
 int enable[12];
 
 ColorCommand colorCommand1(1);
@@ -77,14 +78,18 @@ Keyboard.bind(colorCommand4, GWindow.KEY_4);
 
 [60, 55, 50, 57, 52, 59, 54, 49, 56, 51, 58, 53] @=> int sounds[];
 
+[Color.BLUE, Color.YELLOW, Color.DARKGREEN, Color.PINK] @=> vec3 colors[];
+
+
 for (0 => int i; i < 12; i++)
 {
     1 => enable[i];
+    0 => lock[i];
     index_pos(i)=> vec3 pos;
     
     pos => points[i].pos;
     FlatMaterial f;
-    f.color(Color.YELLOW);
+    f.color(Color.WHITE);
     points[i].mat(f);
     points[i].sca(0.025);
     points[i] --> GG.scene();
@@ -112,7 +117,6 @@ for (0 => int i; i < 12; i++)
 
 
 SphereGeometry point_geo;
-FlatMaterial mat;
 point_geo.build(
 .05,        // radius
  32,         // # segments along width of sphere (default 32)
@@ -124,11 +128,14 @@ point_geo.build(
 );
 
 
-fun TweenAnimation scaleAnimation(GGen item)
+fun TweenAnimation scaleAnimation(GMesh item, int col_index)
 {
     TweenAnimation animation;
+    animation.add(Tween.color(item, colors[col_index],0::second));
     animation.add(Tween.scale(item, 0.2, 0.1::second));
     animation.add(Tween.scale(item, 0.025, 0.1::second));
+    animation.add(Tween.color(item, Color.WHITE, 0::second));
+
 
     return animation;
 
@@ -183,7 +190,7 @@ fun int[] bounce(GGen point, int start_index, int target_index)
 
 fun void bounce_forever(int start_index, int target_index, int osc_num)
 {
-    GMesh point(point_geo, mat);
+    GMesh point(point_geo, FlatMaterial mat(colors[osc_num]));
     Osc @ oscs[4];
     SinOsc sin @=> oscs[0];
     TriOsc tri @=> oscs[1];
@@ -207,7 +214,7 @@ fun void bounce_forever(int start_index, int target_index, int osc_num)
     {
         if (enable[start_index])
         {
-            spork ~ playSound(start_index, osc);
+            spork ~ playSound(start_index, osc, osc_num);
         }
         bounce(point, start_index, target_index) @=> int shit[];
         shit[0] => start_index;
@@ -215,10 +222,15 @@ fun void bounce_forever(int start_index, int target_index, int osc_num)
     }
 }
 
-fun void playSound(int i, Osc osc)
+fun void playSound(int i, Osc osc, int col_index)
 {
-    Tween.play(scaleAnimation(points[i]));
-    
+    if (!lock[i])
+    {
+        1 => lock[i];
+        Tween.play(scaleAnimation(points[i], col_index));
+        0 => lock[i];
+    }
+     
      
     osc => Envelope env =>  OnePole pole => dac;
     //SinOsc osc1 => Envelope env => dac;
@@ -256,6 +268,7 @@ fun int[] pollLeftClickInputs()
             {
                 GlobalData.key => key;
                 0 => GlobalData.keyflag;
+                (temp_point.mat() $ FlatMaterial).color(colors[key - 1]);
             }
             10::ms => now;
         }
@@ -263,6 +276,7 @@ fun int[] pollLeftClickInputs()
         key - 1=> osc;
         GlobalData.leftid => target;
         temp_point --< GG.scene();
+        (temp_point.mat() $ FlatMaterial).color(colors[0]);
     } while (target==start);
     start => ret[0];
     target => ret[1];
@@ -292,7 +306,7 @@ fun void disableNodes()
         else
         {
             1 => enable[node];
-            (points[node].mat() $ FlatMaterial).color(Color.YELLOW);
+            (points[node].mat() $ FlatMaterial).color(Color.WHITE);
         }
     }
 }
@@ -307,6 +321,8 @@ fun void startSequence()
     }
 }
 
+FlatMaterial mat();
+mat.color(@(colors[0].x, colors[0].y, colors[0].z, 0.5)); 
 GMesh temp_point(point_geo, mat);
 
 
