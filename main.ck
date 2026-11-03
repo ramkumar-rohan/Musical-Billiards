@@ -7,8 +7,10 @@ public class GlobalData // wtf is this bro
     static int rightid;
     0 => static int rightidflag;
 
-    static int key;
-    0 => static int keyflag;
+    static int keycolor;
+    0 => static int keycolorflag;
+    
+    0 => static int minusflag;
 }
 public class LeftClickCommand extends MouseCommand {
     fun void click(MouseTarget target) { (target $ ExtendedMouseTarget).id => GlobalData.leftid; 1 => GlobalData.leftidflag;}
@@ -31,9 +33,13 @@ public class ColorCommand extends KeyboardCommand
 {
     int key;
     fun @construct(int i) {i => key;}
-    fun void run() {key => GlobalData.key; 1 => GlobalData.keyflag;}
+    fun void run() {key => GlobalData.keycolor; 1 => GlobalData.keycolorflag;}
 }
 
+public class RemoveCommand extends KeyboardCommand
+{
+    fun void run() {1 => GlobalData.minusflag;}
+}
 
 10::ms => dur update;
 200::ms => dur tick;
@@ -64,6 +70,10 @@ GGen hitboxes[12];
 
 int lock[12];
 int enable[12];
+-1 => int most_recent_ball;
+
+10 => int num_trail_points;
+
 
 ColorCommand colorCommand1(1);
 ColorCommand colorCommand2(2);
@@ -73,6 +83,10 @@ Keyboard.bind(colorCommand1, GWindow.KEY_1);
 Keyboard.bind(colorCommand2, GWindow.KEY_2);
 Keyboard.bind(colorCommand3, GWindow.KEY_3);
 Keyboard.bind(colorCommand4, GWindow.KEY_4);
+
+RemoveCommand removeCommand();
+Keyboard.bind(removeCommand, GWindow.KEY_MINUS);
+
 
 ["C", "G", "D", "A", "E", "B", "F#", "C#", "Ab", "Eb", "Bb", "F"] @=> string textword[];
 
@@ -128,6 +142,22 @@ point_geo.build(
 );
 
 
+fun Geometry getTrailGeo(int size) // size ranges from 0 to num_trail_points
+{
+    SphereGeometry trail_geo;
+    trail_geo.build(
+     .01 + ((0.05 - 0.01) / num_trail_points) * size,        // radius
+     32,         // # segments along width of sphere (default 32)
+     16,          // # segments along vertical arc of sphere (default 16)
+     0,          // phiStart
+     Math.PI * 2, // phiLength   (phi in spherical coordinates)
+     0,          // thetaStart
+     Math.PI     // thetaLength (theta in spherical coordinates)
+    );
+
+    return trail_geo;
+}
+
 fun TweenAnimation scaleAnimation(GMesh item, int col_index)
 {
     TweenAnimation animation;
@@ -136,7 +166,14 @@ fun TweenAnimation scaleAnimation(GMesh item, int col_index)
     animation.add(Tween.scale(item, 0.025, 0.1::second));
     animation.add(Tween.color(item, Color.WHITE, 0::second));
 
+    return animation;
 
+}
+
+fun TweenAnimation deleteAnimation(GMesh item)
+{
+    TweenAnimation animation;
+    animation.add(Tween.scale(item, 0., 0::second, 0));
     return animation;
 
 }
@@ -170,7 +207,7 @@ fun float norm(vec3 vec)
     return Math.sqrt(dot(vec, vec));
 }
 
-fun int[] bounce(GGen point, int start_index, int target_index)
+fun int[] bounce(GGen point, GGen trail_points[], int start_index, int target_index)
 {
     numSteps(start_index, target_index) => int d;
     index_pos(start_index) => vec3 start_pos;
@@ -182,7 +219,13 @@ fun int[] bounce(GGen point, int start_index, int target_index)
 
     for (0 => int i; i < numSteps; i++)
     {
+        for (0 => int j; j < num_trail_points - 1; j++)
+        {
+            trail_points[j].pos(trail_points[j+1].pos());
+        }
+        trail_points[num_trail_points - 1].pos(point.pos());
         point.pos(start_pos +  ((i $ float) / numSteps) * displacement);
+
         update => now;
     }
     return [target_index, (2 * target_index - start_index) % 12];
@@ -190,7 +233,18 @@ fun int[] bounce(GGen point, int start_index, int target_index)
 
 fun void bounce_forever(int start_index, int target_index, int osc_num)
 {
+    1 +=> most_recent_ball;
+    most_recent_ball => int own_number;
+
     GMesh point(point_geo, FlatMaterial mat(colors[osc_num]));
+    point.pos(index_pos(start_index));
+    GMesh @ trail_points[num_trail_points];
+    for (0 => int i; i < num_trail_points; i++)
+    {
+        GMesh trail_point(getTrailGeo(i), FlatMaterial mat(colors[osc_num])) @=> trail_points[i];
+        trail_points[i].pos(index_pos(start_index));
+        trail_points[i] --> GG.scene();
+    }
     Osc @ oscs[4];
     SinOsc sin @=> oscs[0];
     TriOsc tri @=> oscs[1];
@@ -200,7 +254,7 @@ fun void bounce_forever(int start_index, int target_index, int osc_num)
     0.1 => osc.gain;
  
     
-    tick - (now % tick) => now;
+    tick - (now % tick) => now; // snap to tick
     
     
     point --> GG.scene();
@@ -210,24 +264,58 @@ fun void bounce_forever(int start_index, int target_index, int osc_num)
         <<<"ERROR, START AND END ARE SAME">>>;
         return;
     }
-    while (true)
+    while (!(own_number == most_recent_ball && GlobalData.minusflag)) // while i haven't been removed, keep bouncin
     {
         if (enable[start_index])
         {
             spork ~ playSound(start_index, osc, osc_num);
         }
-        bounce(point, start_index, target_index) @=> int shit[];
+        bounce(point, trail_points, start_index, target_index) @=> int shit[];
         shit[0] => start_index;
         shit[1] => target_index;
+    }
+    
+    1 -=> most_recent_ball;
+    0 => GlobalData.minusflag;
+  
+    TweenAnimation @ final_anim;
+    for (-1 => int i; i < num_trail_points; i++)
+    {
+        if (i == -1)
+        {
+            spork ~ Tween.play(deleteAnimation(point));
+        }
+        else
+        {
+            deleteAnimation(trail_points[i])  @=> final_anim; // this is a stupid implementation sorry
+            spork ~ Tween.play(final_anim);
+        }
+        for (0 => int j; j < num_trail_points - 1; j++)
+        {
+            trail_points[j].pos(trail_points[j+1].pos());
+        }
+        trail_points[num_trail_points - 1].pos(point.pos());
+        update => now;
+    }
+
+    final_anim.done => now;
+    point --< GG.scene();
+
+    for (num_trail_points - 1 => int i; i >= 0;  i--)
+    {
+        trail_points[i] --< GG.scene();
     }
 }
 
 fun void playSound(int i, Osc osc, int col_index)
 {
+    TweenAnimation @ anim;
     if (!lock[i])
     {
         1 => lock[i];
-        Tween.play(scaleAnimation(points[i], col_index));
+        scaleAnimation(points[i], col_index) @=> anim; 
+        Tween.play(anim);
+        
         0 => lock[i];
     }
      
@@ -243,6 +331,11 @@ fun void playSound(int i, Osc osc, int col_index)
 
     osc =< env;
 
+    anim.done => now;
+    if (!enable[i])
+    {
+        (points[i].mat() $ FlatMaterial).color(Color.RED);
+    }
 }
 
 fun int[] pollLeftClickInputs()
@@ -264,10 +357,10 @@ fun int[] pollLeftClickInputs()
 
         while (GlobalData.leftidflag == 0)
         {
-            if (GlobalData.keyflag != 0)
+            if (GlobalData.keycolorflag != 0)
             {
-                GlobalData.key => key;
-                0 => GlobalData.keyflag;
+                GlobalData.keycolor => key;
+                0 => GlobalData.keycolorflag;
                 (temp_point.mat() $ FlatMaterial).color(colors[key - 1]);
             }
             10::ms => now;
