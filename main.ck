@@ -11,6 +11,9 @@ public class GlobalData // wtf is this bro
     0 => static int keycolorflag;
     
     0 => static int minusflag;
+
+    0 => static int onflag;
+    0 => static int offflag;
 }
 public class LeftClickCommand extends MouseCommand {
     fun void click(MouseTarget target) { (target $ ExtendedMouseTarget).id => GlobalData.leftid; 1 => GlobalData.leftidflag;}
@@ -41,10 +44,26 @@ public class RemoveCommand extends KeyboardCommand
     fun void run() {1 => GlobalData.minusflag;}
 }
 
+public class AllOnCommand extends KeyboardCommand
+{
+    fun void run() {1 => GlobalData.onflag;}
+}
+
+public class AllOffCommand extends KeyboardCommand
+{
+    fun void run() {1 => GlobalData.offflag;}
+}
+
 10::ms => dur update;
 200::ms => dur tick;
 
-// GWindow.fullscreen();
+GWindow.fullscreen();
+
+GG.bloom(true);
+GG.bloomPass().intensity(0.5);
+GG.bloomPass().radius(0.5);
+GG.bloomPass().levels(9);
+
 
 GTorus ring;
 ring.geometry() $ TorusGeometry @=> TorusGeometry ring_geo;
@@ -87,12 +106,18 @@ Keyboard.bind(colorCommand4, GWindow.KEY_4);
 RemoveCommand removeCommand();
 Keyboard.bind(removeCommand, GWindow.KEY_MINUS);
 
+AllOnCommand onCommand();
+Keyboard.bind(onCommand, GWindow.KEY_RIGHTBRACKET);
+
+AllOffCommand offCommand();
+Keyboard.bind(offCommand, GWindow.KEY_LEFTBRACKET);
+
 
 ["C", "G", "D", "A", "E", "B", "F#", "C#", "Ab", "Eb", "Bb", "F"] @=> string textword[];
 
 [60, 55, 50, 57, 52, 59, 54, 49, 56, 51, 58, 53] @=> int sounds[];
 
-[Color.BLUE, Color.YELLOW, Color.DARKGREEN, Color.PINK] @=> vec3 colors[];
+[2 * Color.BLUE, 2 * Color.YELLOW, 2 * Color.DARKGREEN, 2 * Color.PINK] @=> vec3 colors[];
 
 
 for (0 => int i; i < 12; i++)
@@ -340,7 +365,6 @@ fun void playSound(int i, Osc osc, int col_index)
 
 fun int[] pollLeftClickInputs()
 {
-
     int ret[3];
     int start, target, osc;
     int key; 
@@ -385,7 +409,7 @@ fun int pollRightClickInputs()
     return GlobalData.rightid;
 }
 
-fun void disableNodes()
+fun void rightClickDisableNodes()
 {
     while (true)
     {
@@ -404,9 +428,40 @@ fun void disableNodes()
     }
 }
 
+fun void pollOnOff()
+{
+}
+
+fun void allOnOffDisableNodes()
+{
+    while (true)
+    {
+        if (GlobalData.onflag)
+        {
+            0 => GlobalData.onflag;
+            for (0 => int i; i < 12; i++)
+            {
+                1 => enable[i];
+                (points[i].mat() $ FlatMaterial).color(Color.WHITE);
+            }
+        }
+        if (GlobalData.offflag)
+        {
+            0 => GlobalData.offflag;
+            for (0 => int i; i < 12; i++)
+            {
+                0 => enable[i];
+                (points[i].mat() $ FlatMaterial).color(Color.RED);
+            } 
+        }
+        10::ms => now;
+    }
+}
+
 fun void startSequence()
 {
-    spork ~ disableNodes();
+    spork ~ rightClickDisableNodes();
+    spork ~ allOnOffDisableNodes();
     while(true)
     {
         pollLeftClickInputs() @=> int data[];
